@@ -69,7 +69,7 @@ public class SecurityConfig {
             "http://localhost:5173",
             "http://localhost:3000",
             "http://16.171.6.34",
-            "http://*
+            "http://*"
         ));
 
         config.setAllowedMethods(List.of(
