@@ -68,6 +68,7 @@ public class SecurityConfig {
         config.setAllowedOrigins(List.of(
             "http://localhost:*",
             "http://16.171.6.34",
+            "http://16.171.6.34/",
             "http://*"
         ));
 
