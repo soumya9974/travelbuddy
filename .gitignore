@@ -1,0 +1,18 @@
+# Node
+node_modules/
+dist/
+
+# Java
+target/
+*.log
+
+# Docker
+.env
+
+# IDEs
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
