@@ -18,7 +18,10 @@ export const api = {
         body: JSON.stringify({ email, password }),
       });
       if (!response.ok) throw new Error('Login failed');
-      return response.json();
+      const data = await response.json();
+      const token = data.token ?? data.accessToken;
+      if (token) localStorage.setItem("token", token);
+      return data;
     },
 
     register: async (userData: { name: string; email: string; password: string }) => {
