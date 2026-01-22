@@ -17,32 +17,8 @@ export const api = {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
-
-      const text = await response.text(); // read even if not JSON
-
-      if (!response.ok) {
-        throw new Error(`Login failed (${response.status}): ${text}`);
-      }
-
-      // Try parse JSON
-      let data: any;
-      try {
-        data = JSON.parse(text);
-      } catch {
-        throw new Error(
-          `Login did not return JSON. Got: ${text.substring(0, 200)}`,
-        );
-      }
-
-      const token = data.token ?? data.accessToken ?? data.jwt;
-      if (!token) {
-        throw new Error(
-          `Login response missing token field. Keys: ${Object.keys(data).join(", ")}`,
-        );
-      }
-
-      localStorage.setItem("token", token);
-      return data;
+      if (!response.ok) throw new Error("Login failed");
+      return response.json();
     },
 
     register: async (userData: {
