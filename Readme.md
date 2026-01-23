@@ -135,5 +135,6 @@ All core features were verified to work as intended under normal usage condition
 * Automated unit and integration tests
 * File sharing in group chats
 * Collaborative itinerary planning
+* Sending Emails
 
 
