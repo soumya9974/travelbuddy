@@ -1,6 +1,7 @@
 package com.travelbuddy.controller;
 
 import com.travelbuddy.dto.ChatMessageDTO;
+import com.travelbuddy.model.Message;
 import com.travelbuddy.model.User;
 import com.travelbuddy.repository.UserRepository;
 import com.travelbuddy.service.MessageService;
@@ -72,9 +73,10 @@ public class ChatController {
         }
 
         // ✅ 3) Save + broadcast real chat message
-        messageService.saveMessage(groupId, user, content);
+        Message saved = messageService.saveMessage(groupId, user, content);
 
         ChatMessageDTO outbound = new ChatMessageDTO();
+        outbound.setId(saved.getId());
         outbound.setGroupId(groupId);
         outbound.setSenderId(user.getId());
         outbound.setSenderName(user.getUsername());
