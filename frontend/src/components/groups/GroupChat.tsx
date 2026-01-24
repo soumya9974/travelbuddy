@@ -21,12 +21,15 @@ export const GroupChat = ({ groupId, isMember, isAdmin }: GroupChatProps) => {
   const [loading, setLoading] = useState(true);
   const [typingUser, setTypingUser] = useState<string | null>(null);
 
-  // 3-dots menu open state (per message)
   const [openMenuForId, setOpenMenuForId] = useState<number | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTypingSentAtRef = useRef(0);
+
+  // ✅ safe string helper (prevents crash when content becomes number/null)
+  const toSafeString = (v: unknown) =>
+    v === null || v === undefined ? "" : String(v);
 
   /**
    * 🔥 Handle incoming WS events
@@ -52,33 +55,36 @@ export const GroupChat = ({ groupId, isMember, isAdmin }: GroupChatProps) => {
         setTypingUser(msg.senderName || "Someone");
         if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
 
-        typingTimeoutRef.current = setTimeout(() => {
-          setTypingUser(null);
-        }, 2000);
-
+        typingTimeoutRef.current = setTimeout(() => setTypingUser(null), 2000);
         return;
       }
 
       // ---- CHAT ----
-      if (!msg.content?.trim()) return;
+      const safeContent = toSafeString((msg as any).content);
+      if (!safeContent.trim()) return;
+
+      const normalized: ChatMessage = {
+        ...msg,
+        content: safeContent,
+      };
 
       setMessages((prev) => {
         const exists = prev.some(
           (m) =>
-            m.id === msg.id ||
-            (m.timestamp === msg.timestamp &&
-              Number(m.senderId) === Number(msg.senderId) &&
-              m.content === msg.content)
+            (m.id && normalized.id && m.id === normalized.id) ||
+            (m.timestamp === normalized.timestamp &&
+              Number(m.senderId) === Number(normalized.senderId) &&
+              toSafeString(m.content) === toSafeString(normalized.content)),
         );
-        return exists ? prev : [...prev, msg];
+        return exists ? prev : [...prev, normalized];
       });
     },
-    [user?.id]
+    [user?.id],
   );
 
   const { connected, sendMessage, onlineCount } = useWebSocket(
     groupId,
-    handleNewMessage
+    handleNewMessage,
   );
 
   /**
@@ -89,7 +95,9 @@ export const GroupChat = ({ groupId, isMember, isAdmin }: GroupChatProps) => {
       try {
         const data: Message[] = await apiRequest(
           `/groups/${groupId}/messages`,
-          { token: token! }
+          {
+            token: token!,
+          },
         );
 
         setMessages(
@@ -98,10 +106,10 @@ export const GroupChat = ({ groupId, isMember, isAdmin }: GroupChatProps) => {
             groupId: m.groupId,
             senderId: Number(m.senderId),
             senderName: m.senderName,
-            content: m.content,
+            content: toSafeString((m as any).content), // ✅ important
             timestamp: m.timestamp,
             type: "CHAT",
-          }))
+          })),
         );
       } finally {
         setLoading(false);
@@ -120,6 +128,7 @@ export const GroupChat = ({ groupId, isMember, isAdmin }: GroupChatProps) => {
 
   /**
    * Close menu on outside click / escape
+   * ✅ remove capture so stopPropagation works reliably
    */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -129,13 +138,12 @@ export const GroupChat = ({ groupId, isMember, isAdmin }: GroupChatProps) => {
 
     if (openMenuForId !== null) {
       window.addEventListener("keydown", onKey);
-      // capture so it fires before button handlers if needed
-      window.addEventListener("click", onClick, { capture: true });
+      window.addEventListener("click", onClick); // ✅ no capture
     }
 
     return () => {
       window.removeEventListener("keydown", onKey);
-      window.removeEventListener("click", onClick, { capture: true } as any);
+      window.removeEventListener("click", onClick);
     };
   }, [openMenuForId]);
 
@@ -166,7 +174,6 @@ export const GroupChat = ({ groupId, isMember, isAdmin }: GroupChatProps) => {
 
     const now = Date.now();
     if (now - lastTypingSentAtRef.current < 800) return;
-
     lastTypingSentAtRef.current = now;
 
     sendMessage({
@@ -189,9 +196,9 @@ export const GroupChat = ({ groupId, isMember, isAdmin }: GroupChatProps) => {
       method: "DELETE",
       token: token!,
     });
-    // live delete comes via WS (DELETE_ALL). If backend doesn't broadcast yet,
-    // uncomment next line for immediate UI:
-    // setMessages([]);
+
+    // ✅ optimistic UI (even if WS doesn't arrive)
+    setMessages([]);
   };
 
   const deleteSingleMessage = async (messageId: number) => {
@@ -201,9 +208,9 @@ export const GroupChat = ({ groupId, isMember, isAdmin }: GroupChatProps) => {
       method: "DELETE",
       token: token!,
     });
-    // live delete comes via WS (DELETE). If backend doesn't broadcast yet,
-    // uncomment next line for immediate UI:
-    // setMessages((prev) => prev.filter((m) => m.id !== messageId));
+
+    // ✅ optimistic UI (even if WS doesn't arrive)
+    setMessages((prev) => prev.filter((m) => m.id !== messageId));
   };
 
   if (loading) {
@@ -216,7 +223,6 @@ export const GroupChat = ({ groupId, isMember, isAdmin }: GroupChatProps) => {
 
   return (
     <div className="flex flex-col bg-white rounded-lg overflow-hidden border border-gray-200 h-[calc(100vh-220px)] min-h-[420px] max-h-[700px]">
-      {/* ADMIN DELETE ALL */}
       {isAdmin && messages.length > 0 && (
         <div className="p-2 border-b bg-white">
           <Button
@@ -229,7 +235,6 @@ export const GroupChat = ({ groupId, isMember, isAdmin }: GroupChatProps) => {
         </div>
       )}
 
-      {/* ONLINE */}
       <div className="px-4 py-2 text-sm border-b bg-gray-50">
         Online:{" "}
         {onlineCount === 0
@@ -237,7 +242,6 @@ export const GroupChat = ({ groupId, isMember, isAdmin }: GroupChatProps) => {
           : `${onlineCount} user${onlineCount > 1 ? "s" : ""}`}
       </div>
 
-      {/* MESSAGES */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {messages.map((msg, idx) => {
           const isOwn = Number(msg.senderId) === Number(user?.id);
@@ -246,7 +250,7 @@ export const GroupChat = ({ groupId, isMember, isAdmin }: GroupChatProps) => {
             (idx === 0 ||
               Number(messages[idx - 1].senderId) !== Number(msg.senderId));
 
-          // if message.id is missing for some reason, fall back to timestamp+idx
+          const safeContent = toSafeString((msg as any).content);
           const key = msg.id ?? `${msg.timestamp}-${idx}`;
 
           return (
@@ -254,10 +258,6 @@ export const GroupChat = ({ groupId, isMember, isAdmin }: GroupChatProps) => {
               key={key}
               className={`flex ${isOwn ? "justify-end" : "justify-start"}`}
             >
-              {/* ✅ IMPORTANT LAYOUT FIX:
-                  - wrapper has max width
-                  - bubble container is flex-1 with min-w-0 so text wraps normally
-                  - menu is shrink-0 so it never squeezes the bubble */}
               <div className="flex items-start gap-2 max-w-[90%]">
                 <div className="flex-1 min-w-0">
                   <div
@@ -277,15 +277,12 @@ export const GroupChat = ({ groupId, isMember, isAdmin }: GroupChatProps) => {
                       </p>
                     )}
 
-                    {/* ✅ This keeps your newline support without weird word-splitting.
-                        The splitting you saw was from layout squeeze, fixed above. */}
                     <p className="text-sm whitespace-pre-wrap break-words">
-                      {msg.content}
+                      {safeContent}
                     </p>
                   </div>
                 </div>
 
-                {/* 3-dots admin menu */}
                 {isAdmin && msg.id && (
                   <div
                     className="relative shrink-0"
@@ -295,7 +292,7 @@ export const GroupChat = ({ groupId, isMember, isAdmin }: GroupChatProps) => {
                       className="p-2 rounded-md hover:bg-gray-100 text-gray-500"
                       onClick={() =>
                         setOpenMenuForId((prev) =>
-                          prev === msg.id ? null : msg.id!
+                          prev === msg.id ? null : msg.id!,
                         )
                       }
                       aria-label="Message actions"
@@ -334,7 +331,6 @@ export const GroupChat = ({ groupId, isMember, isAdmin }: GroupChatProps) => {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* INPUT */}
       <div className="border-t p-3 flex gap-2 bg-gray-50">
         <textarea
           className="flex-1 px-4 py-2 border rounded-lg resize-none min-h-[44px]"
